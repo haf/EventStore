@@ -332,32 +332,38 @@ namespace EventStore.Core.TransactionLog.Chunks
 
         private bool IsSoftDeletedTempStreamWithinSameChunk(string eventStreamId, long chunkStart, long chunkEnd)
         {
-            uint sh;
-            uint msh;
-            if (SystemStreams.IsMetastream(eventStreamId))
-            {
-                var originalStreamId = SystemStreams.OriginalStreamOf(eventStreamId);
-                var meta = _readIndex.GetStreamMetadata(originalStreamId);
-                if (meta.TruncateBefore != EventNumber.DeletedStream || meta.TempStream != true)
-                    return false;
-                sh = _hasher.Hash(originalStreamId);
-                msh = _hasher.Hash(eventStreamId);
-            }
-            else
-            {
-                var meta = _readIndex.GetStreamMetadata(eventStreamId);
-                if (meta.TruncateBefore != EventNumber.DeletedStream || meta.TempStream != true)
-                    return false;
-                sh = _hasher.Hash(eventStreamId);
-                msh = _hasher.Hash(SystemStreams.MetastreamOf(eventStreamId));
-            }
+            try {
+                uint sh;
+                uint msh;
+                if (SystemStreams.IsMetastream(eventStreamId))
+                {
+                    var originalStreamId = SystemStreams.OriginalStreamOf(eventStreamId);
+                    var meta = _readIndex.GetStreamMetadata(originalStreamId);
+                    if (meta.TruncateBefore != EventNumber.DeletedStream || meta.TempStream != true)
+                        return false;
+                    sh = _hasher.Hash(originalStreamId);
+                    msh = _hasher.Hash(eventStreamId);
+                }
+                else
+                {
+                    var meta = _readIndex.GetStreamMetadata(eventStreamId);
+                    if (meta.TruncateBefore != EventNumber.DeletedStream || meta.TempStream != true)
+                        return false;
+                    sh = _hasher.Hash(eventStreamId);
+                    msh = _hasher.Hash(SystemStreams.MetastreamOf(eventStreamId));
+                }
 
-            IndexEntry e;
-            var allInChunk = _tableIndex.TryGetOldestEntry(sh, out e) && e.Position >= chunkStart && e.Position < chunkEnd
-                          && _tableIndex.TryGetLatestEntry(sh, out e) && e.Position >= chunkStart && e.Position < chunkEnd
-                          && _tableIndex.TryGetOldestEntry(msh, out e) && e.Position >= chunkStart && e.Position < chunkEnd
-                          && _tableIndex.TryGetLatestEntry(msh, out e) && e.Position >= chunkStart && e.Position < chunkEnd;
-            return allInChunk;
+                IndexEntry e;
+                var allInChunk = _tableIndex.TryGetOldestEntry(sh, out e) && e.Position >= chunkStart && e.Position < chunkEnd
+                              && _tableIndex.TryGetLatestEntry(sh, out e) && e.Position >= chunkStart && e.Position < chunkEnd
+                              && _tableIndex.TryGetOldestEntry(msh, out e) && e.Position >= chunkStart && e.Position < chunkEnd
+                              && _tableIndex.TryGetLatestEntry(msh, out e) && e.Position >= chunkStart && e.Position < chunkEnd;
+                return allInChunk;
+            }
+            catch(Exception ex) {
+                Log.Error(string.Format("Error reading Is soft deleted for {0}", eventStreamId), ex);
+                return false;
+            }
         }
 
         private bool ShouldKeepCommit(CommitLogRecord commit, Dictionary<long, CommitInfo> commits)
